@@ -23,16 +23,11 @@ export function useTheme() {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('dark')
 
-  // On mount, read saved preference or system preference
+  // On mount, read saved preference — dark is always the default
   useEffect(() => {
     const saved = localStorage.getItem('pop-theme') as Theme | null
-    if (saved === 'light' || saved === 'dark') {
-      setTheme(saved)
-    } else {
-      // respect OS preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      setTheme(prefersDark ? 'dark' : 'light')
-    }
+    // Only honour an explicit saved choice; never fall back to OS light mode
+    setTheme(saved === 'light' ? 'light' : 'dark')
   }, [])
 
   // Apply theme class to <html>
