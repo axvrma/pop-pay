@@ -1,21 +1,38 @@
-import { google } from '@ai-sdk/google'
-import { generateText, streamText } from 'ai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient } from '@/lib/supabase/server'
 
-// Allow streaming responses up to 30 seconds
 export const maxDuration = 30
+export const runtime = 'nodejs'
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!)
 
 export async function POST(req: Request) {
-  const { messages } = await req.json()
+  const body = await req.json()
 
+  // ai-sdk v6 sendMessage sends {role, parts:[{type:'text',text}]}
+  // Normalize to plain strings
+  const rawMessages: any[] = body.messages ?? []
+  const normalized = rawMessages.map((m: any) => ({
+    role: m.role === 'user' ? 'user' : 'model',
+    content: typeof m.content === 'string'
+      ? m.content
+      : (m.parts ?? []).filter((p: any) => p.type === 'text').map((p: any) => p.text).join(''),
+  }))
+
+  // The last message is the current user input
+  const lastMsg = normalized[normalized.length - 1]?.content ?? ''
+  // History is everything before the last message
+  const history = normalized.slice(0, -1).map(m => ({
+    role: m.role as 'user' | 'model',
+    parts: [{ text: m.content }],
+  }))
+
+  // Build ledger context from Supabase
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
-
-  // Define context that the AI will use to answer
   let ledgerContext = 'No data available.'
 
   if (session) {
-    // Fetch merchant's ledger summary
     const { data: customers } = await supabase
       .from('customers')
       .select('*, transactions(*)')
@@ -23,43 +40,64 @@ export async function POST(req: Request) {
 
     if (customers) {
       const summary = customers.map(c => {
-        const due = c.transactions.filter((t: any) => t.status === 'approved').reduce((sum: number, tx: any) => sum + tx.amount, 0)
+        const due = c.transactions
+          .filter((t: any) => t.status === 'approved')
+          .reduce((sum: number, tx: any) => sum + tx.amount, 0)
         return due > 0 ? `${c.name} (${c.phone}) owes ₹${due}` : null
       }).filter(Boolean)
 
-      if (summary.length > 0) {
-        ledgerContext = summary.join('\n')
-      } else {
-        ledgerContext = "All amounts are settled. No pending Udhaar."
-      }
+      ledgerContext = summary.length > 0
+        ? summary.join('\n')
+        : 'All amounts are settled. No pending Udhaar.'
     }
   }
 
-  const systemPrompt = `
-You are PopAI, an energetic Gen Z AI assistant for PopPay merchants.
+  const systemPrompt = `You are PopAI, an energetic Gen Z AI assistant for PopPay merchants.
 Your role is to help them manage their Udhaar (credit) collections.
 
 Here is the current ledger summary for the merchant:
 ${ledgerContext}
 
-Users might ask who owes them money or for a payment link.
-If they ask to generate a payment link for a specific debtor, you must output a JSON command wrapped in triple backticks as follows:
+If the user asks to generate a payment link for a specific person, respond with ONLY this JSON block (no extra text):
 \`\`\`json
 {
   "action": "generate_popcard",
   "customerName": "[Name]",
-  "amount": [Amount]
+  "amount": [Amount as number]
 }
 \`\`\`
 
-If you don't need to generate a PopCard, just chat normally with high energy, using emojis. Keep responses short and snappy!
-`
+For any other question, chat normally with high energy and emojis. Keep responses short and snappy!`
 
-  const result = streamText({
-    model: google('models/gemini-1.5-flash'), // Using as proxy for 3.1 Flash requested in prompt
-    system: systemPrompt,
-    messages,
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    systemInstruction: systemPrompt,
   })
 
-  return result.toDataStreamResponse()
+  const chat = model.startChat({ history })
+
+  // Stream the response
+  const streamResult = await chat.sendMessageStream(lastMsg)
+
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of streamResult.stream) {
+        const text = chunk.text()
+        if (text) {
+          // Format as AI SDK UI stream protocol (text part)
+          controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`))
+        }
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-Vercel-AI-Data-Stream': 'v1',
+    },
+  })
 }
