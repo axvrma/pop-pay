@@ -11,75 +11,29 @@ export default function LoginPage() {
   const [email, setEmail]     = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sent, setSent]       = useState(false)
-  const [code, setCode]       = useState(['', '', '', '', '', ''])
-  const [verifying, setVerifying] = useState(false)
-  const inputs = useRef<(HTMLInputElement | null)[]>([])
   const router = useRouter()
   const supabase = createClient()
 
-  /* ── Step 1: send OTP ─────────────────────────────────────────── */
+  /* ── Step 1: send Magic Link ──────────────────────────────────── */
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
     setIsLoading(true)
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },   // no emailRedirectTo — token code only
+      options: { 
+        shouldCreateUser: true,
+        emailRedirectTo: window.location.origin
+      },
     })
 
     if (error) {
-      toast.error('Could not send code', { description: error.message })
+      toast.error('Could not send link', { description: error.message })
     } else {
       setSent(true)
-      toast.success('6-digit code sent to your inbox!')
+      toast.success('Magic link sent to your inbox!')
     }
     setIsLoading(false)
-  }
-
-  /* ── Step 2: verify 6-digit code ─────────────────────────────── */
-  async function handleVerify(e: React.FormEvent) {
-    e.preventDefault()
-    const token = code.join('')
-    if (token.length < 6) return
-
-    setVerifying(true)
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
-    })
-
-    if (error) {
-      toast.error('Invalid code', { description: error.message })
-      setCode(['', '', '', '', '', ''])
-      inputs.current[0]?.focus()
-    } else {
-      toast.success('Logged in! 🎉')
-      router.replace('/dashboard')
-    }
-    setVerifying(false)
-  }
-
-  /* ── OTP box key handler ──────────────────────────────────────── */
-  function handleDigit(val: string, idx: number) {
-    const digit = val.replace(/\D/g, '').slice(-1)
-    const next = [...code]
-    next[idx] = digit
-    setCode(next)
-    if (digit && idx < 5) inputs.current[idx + 1]?.focus()
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent, idx: number) {
-    if (e.key === 'Backspace' && !code[idx] && idx > 0) {
-      inputs.current[idx - 1]?.focus()
-    }
-  }
-
-  function handlePaste(e: React.ClipboardEvent) {
-    e.preventDefault()
-    const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6).split('')
-    setCode([...digits, ...Array(6 - digits.length).fill('')])
-    inputs.current[Math.min(digits.length, 5)]?.focus()
   }
 
   return (
@@ -158,69 +112,42 @@ export default function LoginPage() {
                 </motion.button>
 
                 <p className="text-center text-xs text-white/25">
-                  We'll email you a 6-digit code. No password needed. ✨
+                  We'll email you a magic link. No password needed. ✨
                 </p>
               </motion.form>
             )}
 
-            {/* ── CODE STEP ── */}
+            {/* ── MAGIC LINK STEP ── */}
             {sent && (
-              <motion.form
-                key="code"
+              <motion.div
+                key="magic-link"
                 initial={{ opacity: 0, x: 12 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12 }}
-                onSubmit={handleVerify}
                 className="space-y-5"
               >
                 <div className="text-center">
                   <div className="w-12 h-12 rounded-2xl bg-[#00FF87]/10 border border-[#00FF87]/20 flex items-center justify-center mx-auto mb-3">
                     <Mail className="w-6 h-6 text-[#00FF87]" />
                   </div>
-                  <p className="text-sm font-semibold text-white">Enter the 6-digit code</p>
+                  <p className="text-sm font-semibold text-white">Check your email!</p>
                   <p className="text-xs text-white/40 mt-1">
-                    Sent to <span className="text-[#00FF87]">{email}</span>
+                    We've sent a magic link to <span className="text-[#00FF87]">{email}</span>
                   </p>
                 </div>
 
-                {/* 6 digit boxes */}
-                <div className="flex gap-2 justify-center" onPaste={handlePaste}>
-                  {code.map((digit, i) => (
-                    <input
-                      key={i}
-                      ref={(el) => { inputs.current[i] = el }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleDigit(e.target.value, i)}
-                      onKeyDown={(e) => handleKeyDown(e, i)}
-                      className="w-11 h-12 rounded-xl text-center text-xl font-black text-white bg-white/5 border border-white/10 focus:outline-none focus:border-[#00FF87]/60 focus:ring-2 focus:ring-[#00FF87]/20 transition-all caret-transparent"
-                    />
-                  ))}
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 mt-2 text-center text-sm text-white/70">
+                  Click the secure link in that email to instantly sign in to your PopPay dashboard.
                 </div>
-
-                <motion.button
-                  type="submit"
-                  disabled={verifying || code.join('').length < 6}
-                  whileTap={{ scale: 0.97 }}
-                  whileHover={{ scale: 1.01 }}
-                  className="w-full py-3 rounded-xl bg-[#00FF87] text-black font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:shadow-[0_0_24px_rgba(0,255,135,0.4)]"
-                >
-                  {verifying
-                    ? <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                    : <>Verify & Sign In <ArrowRight className="w-4 h-4" /></>
-                  }
-                </motion.button>
 
                 <button
                   type="button"
-                  onClick={() => { setSent(false); setCode(['', '', '', '', '', '']) }}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
+                  onClick={() => setSent(false)}
+                  className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
                 >
                   <RotateCcw className="w-3 h-3" /> Use a different email
                 </button>
-              </motion.form>
+              </motion.div>
             )}
 
           </AnimatePresence>
