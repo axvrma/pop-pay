@@ -52,7 +52,7 @@ Lighthouse 13.6.0 measured 100 for Performance, Accessibility, Best Practices an
 
 ## Deploy
 
-`npm run build` writes `dist/`, including a versioned offline asset manifest and service worker. Netlify serves those files with a 200 SPA rewrite for deep links. No environment secrets, functions, database or server are needed. `npm run preview` previews the bundle; `node scripts/serve-static.mjs` also exercises the routing and headers from `netlify.toml`. The intended hostname is **poppay.axvrma.com**. See [deployment](docs/DEPLOYMENT.md) for setup and live smoke checks.
+`npm run build` writes `dist/`, including a versioned offline asset manifest and service worker. Netlify serves those files with a 200 SPA rewrite for deep links. No environment secrets, functions, database or server are needed. Use `npm run preview` for a quick local preview or `netlify serve --offline` with the Netlify CLI. The intended hostname is **poppay.axvrma.com**. [Deployment and verification guide](docs/DEPLOYMENT.md)
 
 - [Architecture](docs/ARCHITECTURE.md) · [Data model](docs/DATA_MODEL.md) · [Credit engine](docs/CREDIT_ENGINE.md)
 - [PopCard](docs/POPCARD.md) · [PopAI](docs/POPAI.md) · [Demo mode](docs/DEMO_MODE.md) · [Security](docs/SECURITY.md)
