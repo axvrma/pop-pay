@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /demo
+Disallow: /dashboard
+Disallow: /customers
+Disallow: /customer
+Disallow: /credit
+Disallow: /popcard
+Disallow: /collections
+Disallow: /reports
+Disallow: /assistant
+Sitemap: https://poppay.axvrma.com/sitemap.xml
